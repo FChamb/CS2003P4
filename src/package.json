@@ -3,11 +3,13 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js ../data/deadmedia.json",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Finnegan Chamberlain",
   "license": "ISC",
   "dependencies": {
+    "body-parser": "^1.20.2",
     "express": "^4.18.2",
     "node-fetch": "^3.3.2"
   },
