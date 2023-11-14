@@ -4,8 +4,10 @@ const MediaStore = require("./store.js").MediaStore;
 const store = new MediaStore(false);
 const fs = require("fs");
 const express = require("express");
+const e = require("express");
 const app = express();
 const port = 23750;
+let idSet = false;
 
 function loadData() {
     let pathToExample = null;
@@ -69,23 +71,43 @@ function checkASCII(string) {
     return true;
 }
 
-app.get("/media", async (req, res) => {
-    const data = await store.retrieveAll();
-    data.forEach(function (movie) {
-        let id = movie["id"];
-        movie["id"] = "/media/" + id;
-    })
+app.get("/media/", async (req, res) => {
+    if (!idSet) {
+        const data = await store.retrieveAll();
+        data.forEach(function (movie) {
+            let id = movie["id"];
+            movie["id"] = "/media/" + id;
+        });
+        idSet = true;
+    }
     res.send(await store.retrieveAll());
 });
 
-app.get("/media/[0-9]{1,2}", async (req, res) => {
-    res.send(await store.retrieve());
+app.get("/media/:id", async (req, res) => {
+    if (!idSet) {
+        const data = await store.retrieveAll();
+        data.forEach(function (movie) {
+            let id = movie["id"];
+            movie["id"] = "/media/" + id;
+        });
+        idSet = true;
+    }
+    try {
+        const id = req.params.id;
+        if (id.length == 0) {
+            res.sendStatus(204);
+        }
+        const data = await store.retrieve("/media/" + id);
+        res.sendStatus(200);
+        // res.send(data);
+    } catch (error) {
+        res.sendStatus(500);
+        console.error("Error, movie ID not found!");
+    }
 });
 
 app.listen(port, () => {
     console.log(`Server app listening on port ${port}`)
 });
-
-
 
 loadData();
