@@ -55,7 +55,7 @@ function loadData() {
         try {
             store.create(name, type, desc);
         } catch (error) {
-            console.error("Error in push data: " + name + ", " + type + ", " + desc + " to movie store!");
+            console.error("Error in push data: " + name + ", " + type + ", " + desc + " to store!");
             process.exit(1);
         }
     });
@@ -84,7 +84,7 @@ app.get("/media/", async (req, res) => {
         }
     } catch (error) {
         res.status(500);
-        console.error("Error, movie data not found!");
+        console.error("Error, entry data not found!");
     }
     res.send(data);
 });
@@ -103,7 +103,7 @@ app.get("/media/:id", async (req, res) => {
         } else {
             res.status(500);
         }
-        console.error("Error, movie ID: " + id + " not found!");
+        console.error("Error, entry ID: " + id + " not found!");
     }
     res.send(data);
 });
@@ -111,36 +111,40 @@ app.get("/media/:id", async (req, res) => {
 app.post("/media", async (req, res) => {
     let output = null;
     const movie = req.body;
-    const name = movie["name"];
-    const type = movie["type"];
-    const desc = movie["desc"];
-    console.log(req.body);
-    if (name.length > 40) {
-        console.error("Error, " + name + " is too long!");
-        res.status(400);
-    } else if (!checkASCII(name)) {
-        console.error("Error, " + name + " does not contain ASCII characters!");
-        res.status(400);
-    } else if (!(type === "TAPE" || type === "CD" || type === "DVD")) {
-        console.error("Error, " + type + " is not valid!");
-        res.status(400);
-    } else if (desc.length > 200) {
-        console.error("Error, " + desc + " is too long!");
-        res.status(400);
-    } else if (!checkASCII(desc)) {
-        console.error("Error, " + desc + " does not contain ASCII characters!");
-        res.status(400);
+    if (movie.hasOwnProperty("name") && movie.hasOwnProperty("type") && movie.hasOwnProperty("desc")) {
+        const name = movie["name"];
+        const type = movie["type"];
+        const desc = movie["desc"];
+        try {
+            if (name.length > 40) {
+                console.error("Error, " + name + " is too long!");
+                res.status(400);
+            } else if (!checkASCII(name)) {
+                console.error("Error, " + name + " does not contain ASCII characters!");
+                res.status(400);
+            } else if (!(type === "TAPE" || type === "CD" || type === "DVD")) {
+                console.error("Error, " + type + " is not valid!");
+                res.status(400);
+            } else if (desc.length > 200) {
+                console.error("Error, " + desc + " is too long!");
+                res.status(400);
+            } else if (!checkASCII(desc)) {
+                console.error("Error, " + desc + " does not contain ASCII characters!");
+                res.status(400);
+            } else {
+                res.status(201);
+            }
+            await store.create(name, type, desc);
+            output = JSON.parse(JSON.stringify(await store.retrieve((await store.retrieveAll()).length - 1)));
+            output["id"] = "/media/" + output["id"];
+            console.log("Created new entry: \"" + name + ", " + type + ", " + desc + "\".");
+        } catch (error) {
+            res.status(500);
+            console.error("Error in push data: \"" + name + ", " + type + ", " + desc + "\" to store!");
+        }
     } else {
-        res.status(201);
-    }
-    try {
-        await store.create(name, type, desc);
-        output = JSON.parse(JSON.stringify(await store.retrieve((await store.retrieveAll()).length)));
-        output["id"] = "/media/" + output["id"];
-        console.log("Created new entry: " + name + ", " + type + ", " + desc + ".")
-    } catch (error) {
-        res.status(500);
-        console.error("Error in push data: " + name + ", " + type + ", " + desc + " to movie store!");
+        res.status(400);
+        console.error("Error: entry format invalid!");
     }
     res.send(output);
 });
@@ -148,41 +152,66 @@ app.post("/media", async (req, res) => {
 app.put("/media/:id", async (req, res) => {
     let id = null;
     let data = null;
-    try {
-        const name = req.query.name;
-        const type = req.query.type;
-        const desc = req.query.desc;
-        if (name.length > 40) {
-            console.error("Error, " + name + " is too long!");
-            res.status(400);
-        } else if (!checkASCII(name)) {
-            console.error("Error, " + name + " does not contain ASCII characters!");
-            res.status(400);
-        } else if (!(type === "TAPE" || type === "CD" || type === "DVD")) {
-            console.error("Error, " + type + " is not valid!");
-            res.status(400);
-        } else if (desc.length > 200) {
-            console.error("Error, " + desc + " is too long!");
-            res.status(400);
-        } else if (!checkASCII(desc)) {
-            console.error("Error, " + desc + " does not contain ASCII characters!");
-            res.status(400);
-        } else {
+    const movie = req.body;
+    if (movie.hasOwnProperty("name") && movie.hasOwnProperty("type") && movie.hasOwnProperty("desc")) {
+        const name = movie["name"];
+        const type = movie["type"];
+        const desc = movie["desc"];
+        try {
+            if (name.length > 40) {
+                console.error("Error, " + name + " is too long!");
+                res.status(400);
+            } else if (!checkASCII(name)) {
+                console.error("Error, " + name + " does not contain ASCII characters!");
+                res.status(400);
+            } else if (!(type === "TAPE" || type === "CD" || type === "DVD")) {
+                console.error("Error, " + type + " is not valid!");
+                res.status(400);
+            } else if (desc.length > 200) {
+                console.error("Error, " + desc + " is too long!");
+                res.status(400);
+            } else if (!checkASCII(desc)) {
+                console.error("Error, " + desc + " does not contain ASCII characters!");
+                res.status(400);
+            } else {
+                res.status(200);
+            }
             id = req.params.id;
             await store.update(id, name, type, desc);
-            data = await store.retrieve(parseInt(id));
+            data = JSON.parse(JSON.stringify(await store.retrieve((parseInt(id)))));
             data["id"] = "/media/" + data["id"];
-            res.status(200);
+            console.log("Updated entry: " + id + " to \"" + name + ", " + type + ", " + desc + "\".");
+        } catch (error) {
+            if (error === ("Error: cannot find media with ID: " + id)) {
+                res.status(404);
+            } else {
+                res.status(500);
+            }
+            console.error("Error, entry ID: " + id + " not found!");
         }
-    } catch (error) {
-        res.status(500);
-        console.error("Error, movie ID: " + id + " not found!");
+    } else {
+        res.status(400);
+        console.error("Error: entry format invalid!");
     }
     res.send(data);
 });
 
 app.delete("/media/:id", async (req, res) => {
-
+    let id = null;
+    try {
+        id = req.params.id;
+        await store.delete(id);
+        res.status(204);
+        console.log("Deleted entry ID:" + id + ".")
+    } catch (error) {
+        if (error === ("Error: cannot find media with ID: " + id)) {
+            res.status(404);
+        } else {
+            res.status(500);
+        }
+        console.error("Error, entry ID: " + id + " not found!");
+    }
+    res.send();
 });
 
 app.listen(port,  () => {
@@ -190,3 +219,6 @@ app.listen(port,  () => {
 });
 
 loadData();
+
+// Test command in terminal
+// curl -i -X POST -H "Content-Type: application/json" -d '{"name": "The Hobbit", "type": "DVD", "desc": "The original journey of bilbo."}' http://localhost:23750/media
