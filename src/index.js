@@ -10,7 +10,37 @@ const app = express();
 app.use(bodyParser.json());
 const port = 23750;
 
-function loadData() {
+function checkValid(name, type, desc) {
+    if (name.length > 40) {
+        console.error("Error, " + name + " is too long!");
+        return false;
+    } else if (!checkASCII(name)) {
+        console.error("Error, " + name + " does not contain ASCII characters!");
+        return false;
+    } else if (!(type === "TAPE" || type === "CD" || type === "DVD")) {
+        console.error("Error, " + type + " is not valid!");
+        return false;
+    } else if (desc.length > 200) {
+        console.error("Error, " + desc + " is too long!");
+        return false;
+    } else if (!checkASCII(desc)) {
+        console.error("Error, " + desc + " does not contain ASCII characters!");
+        return false;
+    } else {
+        return true;
+    }
+}
+
+function checkASCII(string) {
+    for (let i = 0; i < string.length; i++) {
+        if (string.charCodeAt(i) > 127) {
+            return false;
+        }
+    }
+    return true;
+}
+
+async function loadData() {
     let pathToExample = null;
     const args = process.argv;
     if (args.length === 3) {
@@ -36,20 +66,8 @@ function loadData() {
         let name = data.name;
         let type = data.type;
         let desc = data.desc;
-        if (name.length > 40) {
-            console.error("In file: " + pathToExample + ", the name: " + name + " is too long!");
-            process.exit(1);
-        } else if (!checkASCII(name)) {
-            console.error("In file: " + pathToExample + ", the name: " + name + " does not contain ASCII characters!");
-            process.exit(1);
-        } else if (!(type === "TAPE" || type === "CD" || type === "DVD")) {
-            console.error("In file: " + pathToExample + ", the type: " + type + " is not valid!");
-            process.exit(1);
-        } else if (desc.length > 200) {
-            console.error("In file: " + pathToExample + ", the desc: " + desc + " is too long!");
-            process.exit(1);
-        } else if (!checkASCII(desc)) {
-            console.error("In file: " + pathToExample + ", the desc: " + desc + " does not contain ASCII characters!");
+        let valid = checkValid(name, type, desc);
+        if (!valid) {
             process.exit(1);
         }
         try {
@@ -61,16 +79,65 @@ function loadData() {
     });
 }
 
-function checkASCII(string) {
-    for (var i = 0; i < string.length; i++) {
-        if (string.charCodeAt(i) > 127) {
-            return false;
+app.get("/media", async (req, res) => {
+    // const name = req.query.name;
+    let limit = parseInt(req.query.limit);
+    let offset = parseInt(req.query.offset);
+    if (limit === null || offset === null) {
+        res.send(await get(res, req));
+    } else {
+        let length = (await store.retrieveAll()).length;
+        if (limit + offset > length) {
+            res.status(500);
+            res.send();
+            return;
         }
+        if (limit < 0) {
+            limit = 0;
+        }
+        if (offset < 0) {
+            offset = 0;
+        }
+        const startIndex = offset;
+        const endIndex = (offset + limit);
+        const count = endIndex - startIndex;
+        let next = null;
+        if ((offset + limit) <= length) {
+            next = "http://127.0.0.1:23750/media?limit=" + limit + "&offset=" + (offset + limit);
+        }
+        let previous = null;
+        if ((offset - limit) >= 0) {
+            previous = "http://127.0.0.1:23750/media?limit=" + limit + "&offset=" + (offset - limit);
+        }
+        let output = null;
+        if (next === null) {
+            output = '{\n\t"count":' + count + ',\n\t"next":' + next + ',\n\t"previous":"' + previous + '",\n\t"results": [';
+        } else {
+            output = '{\n\t"count":' + count + ',\n\t"next":"' + next + '",\n\t"previous":"' + previous + '",\n\t"results": [';
+        }
+        if (previous === null) {
+            output = '{\n\t"count":' + count + ',\n\t"next":"' + next + '",\n\t"previous":' + previous + ',\n\t"results": [';
+        } else {
+            output = '{\n\t"count":' + count + ',\n\t"next":"' + next + '",\n\t"previous":"' + previous + '",\n\t"results": [';
+        }
+        let data = await get(res, req);
+        for (let i = startIndex; i < endIndex; i++) {
+            let movie = null;
+            if (i === startIndex) {
+                movie = data[i];
+                output += ('\n\t\t' + JSON.stringify(movie));
+            } else {
+                movie = data[i];
+                output += (',\n\t\t' + JSON.stringify(movie));
+            }
+        }
+        output += '\n\t]\n}';
+        res.send(JSON.parse(output));
     }
-    return true;
-}
 
-app.get("/media/", async (req, res) => {
+});
+
+async function get(res, req) {
     let data = null;
     try {
         data = JSON.parse(JSON.stringify(await store.retrieveAll()));
@@ -86,8 +153,8 @@ app.get("/media/", async (req, res) => {
         res.status(500);
         console.error("Error, entry data not found!");
     }
-    res.send(data);
-});
+    return data;
+}
 
 app.get("/media/:id", async (req, res) => {
     let id = null;
@@ -116,20 +183,8 @@ app.post("/media", async (req, res) => {
         const type = movie["type"];
         const desc = movie["desc"];
         try {
-            if (name.length > 40) {
-                console.error("Error, " + name + " is too long!");
-                res.status(400);
-            } else if (!checkASCII(name)) {
-                console.error("Error, " + name + " does not contain ASCII characters!");
-                res.status(400);
-            } else if (!(type === "TAPE" || type === "CD" || type === "DVD")) {
-                console.error("Error, " + type + " is not valid!");
-                res.status(400);
-            } else if (desc.length > 200) {
-                console.error("Error, " + desc + " is too long!");
-                res.status(400);
-            } else if (!checkASCII(desc)) {
-                console.error("Error, " + desc + " does not contain ASCII characters!");
+            let valid = checkValid(name, type, desc);
+            if (!valid) {
                 res.status(400);
             } else {
                 res.status(201);
@@ -158,20 +213,8 @@ app.put("/media/:id", async (req, res) => {
         const type = movie["type"];
         const desc = movie["desc"];
         try {
-            if (name.length > 40) {
-                console.error("Error, " + name + " is too long!");
-                res.status(400);
-            } else if (!checkASCII(name)) {
-                console.error("Error, " + name + " does not contain ASCII characters!");
-                res.status(400);
-            } else if (!(type === "TAPE" || type === "CD" || type === "DVD")) {
-                console.error("Error, " + type + " is not valid!");
-                res.status(400);
-            } else if (desc.length > 200) {
-                console.error("Error, " + desc + " is too long!");
-                res.status(400);
-            } else if (!checkASCII(desc)) {
-                console.error("Error, " + desc + " does not contain ASCII characters!");
+            let valid = checkValid(name, type, desc);
+            if (!valid) {
                 res.status(400);
             } else {
                 res.status(200);
