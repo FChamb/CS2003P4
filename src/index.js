@@ -80,59 +80,10 @@ async function loadData() {
 }
 
 app.get("/media", async (req, res) => {
-    // const name = req.query.name;
-    let limit = parseInt(req.query.limit);
-    let offset = parseInt(req.query.offset);
-    if (limit === null || offset === null) {
-        res.send(await get(res, req));
+    if (req.query.hasOwnProperty("limit") && req.query.hasOwnProperty("offset") || (req.query.hasOwnProperty("name") || req.query.hasOwnProperty("type") || req.query.hasOwnProperty("desc"))) {
+        res.send(await getBasicQuery(req, res));
     } else {
-        let length = (await store.retrieveAll()).length;
-        if (limit + offset > length) {
-            res.status(500);
-            res.send();
-            return;
-        }
-        if (limit < 0) {
-            limit = 0;
-        }
-        if (offset < 0) {
-            offset = 0;
-        }
-        const startIndex = offset;
-        const endIndex = (offset + limit);
-        const count = endIndex - startIndex;
-        let next = null;
-        if ((offset + limit) <= length) {
-            next = "http://127.0.0.1:23750/media?limit=" + limit + "&offset=" + (offset + limit);
-        }
-        let previous = null;
-        if ((offset - limit) >= 0) {
-            previous = "http://127.0.0.1:23750/media?limit=" + limit + "&offset=" + (offset - limit);
-        }
-        let output = null;
-        if (next === null) {
-            output = '{\n\t"count":' + count + ',\n\t"next":' + next + ',\n\t"previous":"' + previous + '",\n\t"results": [';
-        } else {
-            output = '{\n\t"count":' + count + ',\n\t"next":"' + next + '",\n\t"previous":"' + previous + '",\n\t"results": [';
-        }
-        if (previous === null) {
-            output = '{\n\t"count":' + count + ',\n\t"next":"' + next + '",\n\t"previous":' + previous + ',\n\t"results": [';
-        } else {
-            output = '{\n\t"count":' + count + ',\n\t"next":"' + next + '",\n\t"previous":"' + previous + '",\n\t"results": [';
-        }
-        let data = await get(res, req);
-        for (let i = startIndex; i < endIndex; i++) {
-            let movie = null;
-            if (i === startIndex) {
-                movie = data[i];
-                output += ('\n\t\t' + JSON.stringify(movie));
-            } else {
-                movie = data[i];
-                output += (',\n\t\t' + JSON.stringify(movie));
-            }
-        }
-        output += '\n\t]\n}';
-        res.send(JSON.parse(output));
+        res.send(await get(res, req));
     }
 
 });
@@ -154,6 +105,92 @@ async function get(res, req) {
         console.error("Error, entry data not found!");
     }
     return data;
+}
+
+async function getBasicQuery(req, res) {
+    let name = null;
+    let type = null;
+    let desc = null;
+    if (req.query.hasOwnProperty("name")) {
+        name = req.query.name.toLowerCase();
+    }
+    if (req.query.hasOwnProperty("type")) {
+        type = req.query.type.toLowerCase();
+    }
+    if (req.query.hasOwnProperty("desc")) {
+        desc = req.query.desc.toLowerCase();
+    }
+    let limit = null;
+    if (req.query.hasOwnProperty("limit")) {
+        limit = parseInt(req.query.limit);
+    }
+    let offset = null;
+    if (req.query.hasOwnProperty("offset")) {
+        offset = parseInt(req.query.offset);
+    }
+    let results = [];
+    let data = await get(res, req);
+    if (name !== null || type !== null || desc !== null) {
+        data.forEach(function (movie) {
+            if (name !== null) {
+                if (movie.name.toLowerCase() === name) {
+                    results.push(movie);
+                }
+            } else if (type !== null) {
+                if (movie.type.toLowerCase() === type) {
+                    results.push(movie);
+                }
+            } else if (desc !== null) {
+                if (movie.desc.includes(desc)) {
+                    results.push(movie);
+                }
+            }
+        });
+    }
+    let count = results.length;
+    let next = null;
+    let previous = null;
+    if (limit !== null && offset !== null) {
+        let length = (await store.retrieveAll()).length;
+        if (limit + offset > length) {
+            res.status(204);
+            res.send();
+            return;
+        }
+        if (limit < 0) {
+            limit = 0;
+        }
+        if (offset < 0) {
+            offset = 0;
+        }
+        const startIndex = offset;
+        const endIndex = (offset + limit);
+        count = endIndex - startIndex;
+        /**
+         * This needs work on. Not grabbing proper next and previous.
+         */
+        if ((offset - limit) < 0 && (limit !== length && offset !== length) && (offset + limit) > length) {
+            next = 'http://127.0.0.1:23750/media?limit=' + limit + '&offset=' + (offset + limit);
+        }
+        if (offset !== 0 && limit !== 0 && (offset - limit) > 0) {
+            previous = 'http://127.0.0.1:23750/media?limit=' + limit + '&offset=' + (offset - limit);
+        }
+        for (let i = startIndex; i < endIndex; i++) {
+            results.push(data[i]);
+        }
+
+    }
+    let outputJSON = {
+        "count": count,
+        "next": next,
+        "previous": previous,
+        "results": []
+    }
+    outputJSON.results = results;
+    if (outputJSON.count === 0) {
+        res.status(204);
+    }
+    return outputJSON;
 }
 
 app.get("/media/:id", async (req, res) => {
@@ -259,6 +296,10 @@ app.delete("/media/:id", async (req, res) => {
 
 app.listen(port,  () => {
     console.log(`Server app listening on port ${port}`)
+});
+
+app.post("/transfer", async (req, res) => {
+
 });
 
 loadData();
