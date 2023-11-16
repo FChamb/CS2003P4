@@ -111,6 +111,14 @@ async function getBasicQuery(req, res) {
     let name = null;
     let type = null;
     let desc = null;
+    let limit = null;
+    let offset = null;
+    if (req.query.hasOwnProperty("limit")) {
+        limit = parseInt(req.query.limit);
+    }
+    if (req.query.hasOwnProperty("offset")) {
+        offset = parseInt(req.query.offset);
+    }
     if (req.query.hasOwnProperty("name")) {
         name = req.query.name.toLowerCase();
     }
@@ -120,34 +128,45 @@ async function getBasicQuery(req, res) {
     if (req.query.hasOwnProperty("desc")) {
         desc = req.query.desc.toLowerCase();
     }
-    let limit = null;
-    if (req.query.hasOwnProperty("limit")) {
-        limit = parseInt(req.query.limit);
-    }
-    let offset = null;
-    if (req.query.hasOwnProperty("offset")) {
-        offset = parseInt(req.query.offset);
-    }
+    let movieList = [];
     let results = [];
     let data = await get(res, req);
     if (name !== null || type !== null || desc !== null) {
         data.forEach(function (movie) {
+            movieList.push(movie);
+        });
+        for (let i = 0; i < movieList.length; i++) {
+            let movie = movieList[i];
             if (name !== null) {
-                if (movie.name.toLowerCase() === name) {
-                    results.push(movie);
-                }
-            } else if (type !== null) {
-                if (movie.type.toLowerCase() === type) {
-                    results.push(movie);
-                }
-            } else if (desc !== null) {
-                if (movie.desc.includes(desc)) {
-                    results.push(movie);
+                if (movie.name.toLowerCase() !== name) {
+                    let index = results.indexOf(movie);
+                    if (index !== -1) {
+                        movieList.splice(index, 1);
+                        i--;
+                    }
                 }
             }
-        });
+            if (type !== null) {
+                if (movie.type.toLowerCase() !== type) {
+                    let index = results.indexOf(movie);
+                    if (index !== -1) {
+                        movieList.splice(index, 1);
+                        i--;
+                    }
+                }
+            }
+            if (desc !== null) {
+                if (!movie.desc.toLowerCase().includes(desc)) {
+                    let index = results.indexOf(movie);
+                    if (index !== -1) {
+                        movieList.splice(index, 1);
+                        i--;
+                    }
+                }
+            }
+        }
     }
-    let count = results.length;
+    let count = movieList.length;
     let next = null;
     let previous = null;
     if (limit !== null && offset !== null) {
@@ -169,16 +188,24 @@ async function getBasicQuery(req, res) {
         /**
          * This needs work on. Not grabbing proper next and previous.
          */
-        if ((offset - limit) < 0 && (limit !== length && offset !== length) && (offset + limit) > length) {
+        if (offset + limit >= length) {
+            next = null;
+        } else {
             next = 'http://127.0.0.1:23750/media?limit=' + limit + '&offset=' + (offset + limit);
         }
-        if (offset !== 0 && limit !== 0 && (offset - limit) > 0) {
+        let previousNum = offset - limit;
+        if (previousNum < 0) {
+            previous = null
+        } else if (previousNum === 0) {
+            previous = 'http://127.0.0.1:23750/media?limit=0' + '&offset=' + previousNum;
+        } else {
             previous = 'http://127.0.0.1:23750/media?limit=' + limit + '&offset=' + (offset - limit);
         }
         for (let i = startIndex; i < endIndex; i++) {
-            results.push(data[i]);
+            results.push(movieList[i]);
         }
-
+    } else {
+        results = movieList;
     }
     let outputJSON = {
         "count": count,
@@ -302,7 +329,9 @@ app.post("/transfer", async (req, res) => {
 
 });
 
-loadData();
+await loadData();
+
+module.exports = app;
 
 // Test command in terminal
 // curl -i -X POST -H "Content-Type: application/json" -d '{"name": "The Hobbit", "type": "DVD", "desc": "The original journey of bilbo."}' http://localhost:23750/media

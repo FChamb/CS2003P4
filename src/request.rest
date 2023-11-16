@@ -15,5 +15,19 @@ GET http://localhost:23750/media?limit=3&offset=5
 GET http://localhost:23750/media?limit=3&offset=8
 ###
 GET http://localhost:23750/media?limit=2&offset=2
+
+
 ###
 GET http://localhost:23750/media?name=Pulp%20Fiction&type=DVD
+###
+GET http://localhost:23750/media?name=The%20Matrix&type=DVD
+###
+GET http://localhost:23750/media?type=DVD
+###
+GET http://localhost:23750/media?desc=stunning+sci-fi
+###
+GET http://localhost:23750/media?desc=and&type=dvd
+
+
+###
+GET http://localhost:23750/media?type=DVD&limit=2&offset=0
