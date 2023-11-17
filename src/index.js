@@ -5,6 +5,7 @@ const store = new MediaStore(false);
 const fs = require("fs");
 const express = require("express");
 const bodyParser = require("body-parser");
+const fetch = require("node-fetch");
 const app = express();
 app.use(bodyParser.json());
 const port = 23751;
@@ -228,7 +229,8 @@ app.get("/media/:id", async (req, res) => {
 
 app.post("/media", async (req, res) => {
     let output = null;
-    const movie = req.body;
+    const movie = await req.body;
+    console.log(movie);
     if (movie.hasOwnProperty("name") && movie.hasOwnProperty("type") && movie.hasOwnProperty("desc")) {
         const name = movie["name"];
         const type = movie["type"];
@@ -327,19 +329,24 @@ app.post("/transfer", async (req, res) => {
                 "type": transfer.type,
                 "desc": transfer.desc
             };
-            await fetch(target, JSON.stringify({
+            const sendData = {
                 method: "POST",
-                body: {
+                header: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
                     "name": transfer.name,
                     "type": transfer.type,
                     "desc": transfer.desc
-                }
-            }));
+                })
+            };
+            await fetch(target,sendData).then(res => res.json());
         } catch (error) {
             if (error === ("Error: cannot find media with ID: " + id)) {
                 res.status(404);
                 console.error("Error, entry ID: " + id + " not found!");
             } else {
+                console.log(error);
                 res.status(421);
                 console.error("Transfer request is invalid!")
             }
