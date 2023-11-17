@@ -4,11 +4,10 @@ const MediaStore = require("./store.js").MediaStore;
 const store = new MediaStore(false);
 const fs = require("fs");
 const express = require("express");
-const e = require("express");
 const bodyParser = require("body-parser");
 const app = express();
 app.use(bodyParser.json());
-const port = 23750;
+const port = 23751;
 
 function checkValid(name, type, desc) {
     if (name.length > 40) {
@@ -107,73 +106,61 @@ async function get(res, req) {
     return data;
 }
 
+function checkRemove(results, paramType, parameter) {
+    for (let i = 0; i < results.length; i++) {
+        if (paramType === "name" && parameter !== null && results[i].name.toLowerCase() !== parameter) {
+            results.splice(i, 1);
+            i--;
+        } else if (paramType === "type" && parameter !== null && results[i].type.toLowerCase() !== parameter) {
+            results.splice(i, 1);
+            i--;
+        } else if (paramType === "desc" && parameter !== null && !results[i].desc.toLowerCase().includes(parameter)) {
+            results.splice(i, 1);
+            i--;
+        }
+    }
+}
+
 async function getBasicQuery(req, res) {
+    const body = req.query;
     let name = null;
     let type = null;
     let desc = null;
     let limit = null;
     let offset = null;
-    if (req.query.hasOwnProperty("limit")) {
-        limit = parseInt(req.query.limit);
+    if (body.hasOwnProperty("limit")) {
+        limit = parseInt(body.limit);
     }
-    if (req.query.hasOwnProperty("offset")) {
-        offset = parseInt(req.query.offset);
+    if (body.hasOwnProperty("offset")) {
+        offset = parseInt(body.offset);
     }
-    if (req.query.hasOwnProperty("name")) {
-        name = req.query.name.toLowerCase();
+    if (body.hasOwnProperty("name")) {
+        name = body.name.toLowerCase();
     }
-    if (req.query.hasOwnProperty("type")) {
-        type = req.query.type.toLowerCase();
+    if (body.hasOwnProperty("type")) {
+        type = body.type.toLowerCase();
     }
-    if (req.query.hasOwnProperty("desc")) {
-        desc = req.query.desc.toLowerCase();
+    if (body.hasOwnProperty("desc")) {
+        desc = body.desc.toLowerCase();
     }
-    let movieList = [];
     let results = [];
+    let remove = [];
     let data = await get(res, req);
+    data.forEach(function (movie) {
+        remove.push(movie);
+    });
     if (name !== null || type !== null || desc !== null) {
-        data.forEach(function (movie) {
-            movieList.push(movie);
-        });
-        for (let i = 0; i < movieList.length; i++) {
-            let movie = movieList[i];
-            if (name !== null) {
-                if (movie.name.toLowerCase() !== name) {
-                    let index = results.indexOf(movie);
-                    if (index !== -1) {
-                        movieList.splice(index, 1);
-                        i--;
-                    }
-                }
-            }
-            if (type !== null) {
-                if (movie.type.toLowerCase() !== type) {
-                    let index = results.indexOf(movie);
-                    if (index !== -1) {
-                        movieList.splice(index, 1);
-                        i--;
-                    }
-                }
-            }
-            if (desc !== null) {
-                if (!movie.desc.toLowerCase().includes(desc)) {
-                    let index = results.indexOf(movie);
-                    if (index !== -1) {
-                        movieList.splice(index, 1);
-                        i--;
-                    }
-                }
-            }
-        }
+        checkRemove(remove, "name", name);
+        checkRemove(remove, "type", type);
+        checkRemove(remove, "desc", desc);
     }
-    let count = movieList.length;
+    let count = remove.length;
     let next = null;
     let previous = null;
     if (limit !== null && offset !== null) {
         let length = (await store.retrieveAll()).length;
         if (limit + offset > length) {
             res.status(204);
-            res.send();
             return;
         }
         if (limit < 0) {
@@ -197,22 +184,22 @@ async function getBasicQuery(req, res) {
         if (previousNum < 0) {
             previous = null
         } else if (previousNum === 0) {
-            previous = 'http://127.0.0.1:23750/media?limit=0' + '&offset=' + previousNum;
+            previous = 'http://127.0.0.1:23750/media?limit=' + limit + '&offset=' + previousNum;
         } else {
             previous = 'http://127.0.0.1:23750/media?limit=' + limit + '&offset=' + (offset - limit);
         }
         for (let i = startIndex; i < endIndex; i++) {
-            results.push(movieList[i]);
+            results.push(remove[i]);
         }
     } else {
-        results = movieList;
+        results = remove;
     }
     let outputJSON = {
         "count": count,
         "next": next,
         "previous": previous,
         "results": []
-    }
+    };
     outputJSON.results = results;
     if (outputJSON.count === 0) {
         res.status(204);
@@ -321,17 +308,53 @@ app.delete("/media/:id", async (req, res) => {
     res.send();
 });
 
+app.post("/transfer", async (req, res) => {
+    let id = null;
+    let print = null;
+    let movie = req.body;
+    if (movie.hasOwnProperty("source") && movie.hasOwnProperty("target")) {
+        const source = movie["source"];
+        const target = movie["target"];
+        try {
+            id = source.substring(7);
+            let transfer = await store.retrieve(parseInt(id));
+            await store.delete(id);
+            res.status(200);
+            id = target + "/" + id;
+            print = {
+                "id": id,
+                "name": transfer.name,
+                "type": transfer.type,
+                "desc": transfer.desc
+            };
+            await fetch(target, JSON.stringify({
+                method: "POST",
+                body: {
+                    "name": transfer.name,
+                    "type": transfer.type,
+                    "desc": transfer.desc
+                }
+            }));
+        } catch (error) {
+            if (error === ("Error: cannot find media with ID: " + id)) {
+                res.status(404);
+                console.error("Error, entry ID: " + id + " not found!");
+            } else {
+                res.status(421);
+                console.error("Transfer request is invalid!")
+            }
+        }
+    } else {
+        res.status(404);
+        console.error("Error invalid entry format!")
+    }
+    res.send(print);
+});
+
 app.listen(port,  () => {
     console.log(`Server app listening on port ${port}`)
 });
 
-app.post("/transfer", async (req, res) => {
-
-});
-
-await loadData();
+loadData();
 
 module.exports = app;
-
-// Test command in terminal
-// curl -i -X POST -H "Content-Type: application/json" -d '{"name": "The Hobbit", "type": "DVD", "desc": "The original journey of bilbo."}' http://localhost:23750/media
