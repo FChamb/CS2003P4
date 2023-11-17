@@ -1,15 +1,27 @@
 "use strict";
 
+/**
+ * Global variables for the functions to use. Creates an instance of the media store.
+ * Require express, body-parser, and node-fetch. Sets global port number to 23750.
+ * @type {MediaStore} instance of the MediaStore file
+ */
 const MediaStore = require("./store.js").MediaStore;
 const store = new MediaStore(false);
 const fs = require("fs");
-const express = require("express");
 const bodyParser = require("body-parser");
-const fetch = require("node-fetch");
-const app = express();
-app.use(bodyParser.json());
-const port = 23751;
+let app = require("./app");
+const port = 23750;
 
+/**
+ * Check valid takes three parameters: name, type, and desc. These are the individual
+ * attributes of a media and are checked using conditional statements. Two checks per
+ * argument, first to ensure that the length is not greater than it should be, and second
+ * checks the ASCII by calling another function.
+ * @param name of the media
+ * @param type of the media
+ * @param desc of the media
+ * @returns {boolean} true if the media is valid for the store
+ */
 function checkValid(name, type, desc) {
     if (name.length > 40) {
         console.error("Error, " + name + " is too long!");
@@ -31,6 +43,13 @@ function checkValid(name, type, desc) {
     }
 }
 
+/**
+ * Check ASCII takes a string variable and determines if any of the characters
+ * in its content are not ASCII. This is done through a simple conditional statement.
+ * ASCII characters are greater than code type 127, so if the value is less false is returned.
+ * @param string
+ * @returns {boolean}
+ */
 function checkASCII(string) {
     for (let i = 0; i < string.length; i++) {
         if (string.charCodeAt(i) > 127) {
@@ -40,15 +59,27 @@ function checkASCII(string) {
     return true;
 }
 
+/**
+ * Load data is the main function loading function of this file.
+ * It looks at the command line arguments and determines if a file path has been
+ * provided. If the file path has not been provided, a console error is printed
+ * and the program exits. Otherwise, a fs read file sync call is attempted with
+ * the provided path. The data is attempted to be parsed from json. Should the file
+ * not exist or not contain json, a console error is provided. Lastly,
+ * for every json object in the file, it is checked against valid using
+ * the above methods and if valid it is added to the media store.
+ * @returns {Promise<void>}
+ */
 async function loadData() {
     let pathToExample = null;
-    const args = process.argv;
-    if (args.length === 3) {
-        pathToExample = args[2];
-    } else {
-        console.error("Expected \"path/to/directory\" of example data!");
-        process.exit(1);
-    }
+    // const args = process.argv;
+    // if (args.length === 3) {
+    //     pathToExample = args[2];
+    // } else {
+    //     console.error("Expected \"path/to/directory\" of example data!");
+    //     process.exit(1);
+    // }
+    pathToExample = "../data/deadmedia.json";
 
     let file = null;
     let info = null;
@@ -56,312 +87,51 @@ async function loadData() {
         file = fs.readFileSync(pathToExample, "utf-8");
     } catch (error) {
         console.error("File: " + pathToExample + " does not exist!");
+        process.exit(1);
     }
     try {
         info = JSON.parse(file);
     } catch (error) {
-        console.error("File: " + pathToExample + " does not follow valid .json format!")
+        console.error("File: " + pathToExample + " does not follow valid .json format!");
+        process.exit(1);
     }
-    info.forEach(function (data){
-        let name = data.name;
-        let type = data.type;
-        let desc = data.desc;
-        let valid = checkValid(name, type, desc);
-        if (!valid) {
-            process.exit(1);
-        }
-        try {
-            store.create(name, type, desc);
-        } catch (error) {
-            console.error("Error in push data: " + name + ", " + type + ", " + desc + " to store!");
-            process.exit(1);
-        }
-    });
-}
-
-app.get("/media", async (req, res) => {
-    if (req.query.hasOwnProperty("limit") && req.query.hasOwnProperty("offset") || (req.query.hasOwnProperty("name") || req.query.hasOwnProperty("type") || req.query.hasOwnProperty("desc"))) {
-        res.send(await getBasicQuery(req, res));
-    } else {
-        res.send(await get(res, req));
-    }
-
-});
-
-async function get(res, req) {
-    let data = null;
-    try {
-        data = JSON.parse(JSON.stringify(await store.retrieveAll()));
-        data.forEach(function (movie) {
-            movie["id"] = "/media/" + movie["id"];
+    if (info != null) {
+        info.forEach(function (data){
+            let name = data.name;
+            let type = data.type;
+            let desc = data.desc;
+            let valid = checkValid(name, type, desc);
+            if (!valid) {
+                process.exit(1);
+            }
+            try {
+                store.create(name, type, desc);
+            } catch (error) {
+                console.error("Error in push data: " + name + ", " + type + ", " + desc + " to store!");
+                process.exit(1);
+            }
         });
-        if (data.length === 0) {
-            res.status(204);
-        } else {
-            res.status(200);
-        }
-    } catch (error) {
-        res.status(500);
-        console.error("Error, entry data not found!");
-    }
-    return data;
-}
-
-function checkRemove(results, paramType, parameter) {
-    for (let i = 0; i < results.length; i++) {
-        if (paramType === "name" && parameter !== null && results[i].name.toLowerCase() !== parameter) {
-            results.splice(i, 1);
-            i--;
-        } else if (paramType === "type" && parameter !== null && results[i].type.toLowerCase() !== parameter) {
-            results.splice(i, 1);
-            i--;
-        } else if (paramType === "desc" && parameter !== null && !results[i].desc.toLowerCase().includes(parameter)) {
-            results.splice(i, 1);
-            i--;
-        }
     }
 }
 
-async function getBasicQuery(req, res) {
-    const body = req.query;
-    let name = null;
-    let type = null;
-    let desc = null;
-    let limit = null;
-    let offset = null;
-    if (body.hasOwnProperty("limit")) {
-        limit = parseInt(body.limit);
-    }
-    if (body.hasOwnProperty("offset")) {
-        offset = parseInt(body.offset);
-    }
-    if (body.hasOwnProperty("name")) {
-        name = body.name.toLowerCase();
-    }
-    if (body.hasOwnProperty("type")) {
-        type = body.type.toLowerCase();
-    }
-    if (body.hasOwnProperty("desc")) {
-        desc = body.desc.toLowerCase();
-    }
-    let results = [];
-    let remove = [];
-    let data = await get(res, req);
-    data.forEach(function (movie) {
-        remove.push(movie);
-    });
-    if (name !== null || type !== null || desc !== null) {
-        checkRemove(remove, "name", name);
-        checkRemove(remove, "type", type);
-        checkRemove(remove, "desc", desc);
-    }
-    let count = remove.length;
-    let next = null;
-    let previous = null;
-    if (limit !== null && offset !== null) {
-        let length = (await store.retrieveAll()).length;
-        if (limit + offset > length) {
-            res.status(204);
-            return;
-        }
-        if (limit < 0) {
-            limit = 0;
-        }
-        if (offset < 0) {
-            offset = 0;
-        }
-        const startIndex = offset;
-        const endIndex = (offset + limit);
-        count = endIndex - startIndex;
-        /**
-         * This needs work on. Not grabbing proper next and previous.
-         */
-        if (offset + limit >= length) {
-            next = null;
-        } else {
-            next = 'http://127.0.0.1:23750/media?limit=' + limit + '&offset=' + (offset + limit);
-        }
-        let previousNum = offset - limit;
-        if (previousNum < 0) {
-            previous = null
-        } else if (previousNum === 0) {
-            previous = 'http://127.0.0.1:23750/media?limit=' + limit + '&offset=' + previousNum;
-        } else {
-            previous = 'http://127.0.0.1:23750/media?limit=' + limit + '&offset=' + (offset - limit);
-        }
-        for (let i = startIndex; i < endIndex; i++) {
-            results.push(remove[i]);
-        }
-    } else {
-        results = remove;
-    }
-    let outputJSON = {
-        "count": count,
-        "next": next,
-        "previous": previous,
-        "results": []
-    };
-    outputJSON.results = results;
-    if (outputJSON.count === 0) {
-        res.status(204);
-    }
-    return outputJSON;
-}
+// /**
+//  * Creates an app listening port on the provided server port and prints out
+//  * output to the console.
+//  * @type {http.Server}
+//  */
+// const server = app.listen(port,async () => {
+//     await console.log(`Server app listening on port ${port}`)
+// });
 
-app.get("/media/:id", async (req, res) => {
-    let id = null;
-    let data = null;
-    try {
-        id = req.params.id;
-        data = JSON.parse(JSON.stringify(await store.retrieve(parseInt(id))));
-        data["id"] = "/media/" + data["id"];
-        res.status(200);
-    } catch (error) {
-        if (error === ("Error: cannot find media with ID: " + id)) {
-            res.status(404);
-        } else {
-            res.status(500);
-        }
-        console.error("Error, entry ID: " + id + " not found!");
-    }
-    res.send(data);
-});
+// function returnServer(store) {
+//     app = require("./app");
+//     app.use(bodyParser.json());
+// }
 
-app.post("/media", async (req, res) => {
-    let output = null;
-    const movie = await req.body;
-    console.log(movie);
-    if (movie.hasOwnProperty("name") && movie.hasOwnProperty("type") && movie.hasOwnProperty("desc")) {
-        const name = movie["name"];
-        const type = movie["type"];
-        const desc = movie["desc"];
-        try {
-            let valid = checkValid(name, type, desc);
-            if (!valid) {
-                res.status(400);
-            } else {
-                res.status(201);
-            }
-            await store.create(name, type, desc);
-            output = JSON.parse(JSON.stringify(await store.retrieve((await store.retrieveAll()).length - 1)));
-            output["id"] = "/media/" + output["id"];
-            console.log("Created new entry: \"" + name + ", " + type + ", " + desc + "\".");
-        } catch (error) {
-            res.status(500);
-            console.error("Error in push data: \"" + name + ", " + type + ", " + desc + "\" to store!");
-        }
-    } else {
-        res.status(400);
-        console.error("Error: entry format invalid!");
-    }
-    res.send(output);
-});
+app.returnServer(store);
 
-app.put("/media/:id", async (req, res) => {
-    let id = null;
-    let data = null;
-    const movie = req.body;
-    if (movie.hasOwnProperty("name") && movie.hasOwnProperty("type") && movie.hasOwnProperty("desc")) {
-        const name = movie["name"];
-        const type = movie["type"];
-        const desc = movie["desc"];
-        try {
-            let valid = checkValid(name, type, desc);
-            if (!valid) {
-                res.status(400);
-            } else {
-                res.status(200);
-            }
-            id = req.params.id;
-            await store.update(id, name, type, desc);
-            data = JSON.parse(JSON.stringify(await store.retrieve((parseInt(id)))));
-            data["id"] = "/media/" + data["id"];
-            console.log("Updated entry: " + id + " to \"" + name + ", " + type + ", " + desc + "\".");
-        } catch (error) {
-            if (error === ("Error: cannot find media with ID: " + id)) {
-                res.status(404);
-            } else {
-                res.status(500);
-            }
-            console.error("Error, entry ID: " + id + " not found!");
-        }
-    } else {
-        res.status(400);
-        console.error("Error: entry format invalid!");
-    }
-    res.send(data);
-});
-
-app.delete("/media/:id", async (req, res) => {
-    let id = null;
-    try {
-        id = req.params.id;
-        await store.delete(id);
-        res.status(204);
-        console.log("Deleted entry ID:" + id + ".")
-    } catch (error) {
-        if (error === ("Error: cannot find media with ID: " + id)) {
-            res.status(404);
-        } else {
-            res.status(500);
-        }
-        console.error("Error, entry ID: " + id + " not found!");
-    }
-    res.send();
-});
-
-app.post("/transfer", async (req, res) => {
-    let id = null;
-    let print = null;
-    let movie = req.body;
-    if (movie.hasOwnProperty("source") && movie.hasOwnProperty("target")) {
-        const source = movie["source"];
-        const target = movie["target"];
-        try {
-            id = source.substring(7);
-            let transfer = await store.retrieve(parseInt(id));
-            await store.delete(id);
-            res.status(200);
-            id = target + "/" + id;
-            print = {
-                "id": id,
-                "name": transfer.name,
-                "type": transfer.type,
-                "desc": transfer.desc
-            };
-            const sendData = {
-                method: "POST",
-                header: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    "name": transfer.name,
-                    "type": transfer.type,
-                    "desc": transfer.desc
-                })
-            };
-            await fetch(target,sendData).then(res => res.json());
-        } catch (error) {
-            if (error === ("Error: cannot find media with ID: " + id)) {
-                res.status(404);
-                console.error("Error, entry ID: " + id + " not found!");
-            } else {
-                console.log(error);
-                res.status(421);
-                console.error("Transfer request is invalid!")
-            }
-        }
-    } else {
-        res.status(404);
-        console.error("Error invalid entry format!")
-    }
-    res.send(print);
-});
-
-app.listen(port,  () => {
-    console.log(`Server app listening on port ${port}`)
-});
-
-loadData();
-
-module.exports = app;
+module.exports = {
+    checkValid,
+    checkASCII,
+    loadData,
+};

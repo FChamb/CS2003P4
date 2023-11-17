@@ -37,8 +37,3 @@ GET http://localhost:23750/media?desc=and&type=dvd
 
 ###
 GET http://localhost:23750/media?type=DVD&limit=2&offset=0
-
-###
-POST http://localhost:23750/transfer
-
-{"source":"/media/18", "target":"http://localhost:23750/media"}
