@@ -2,15 +2,21 @@
 
 /**
  * Global variables for the functions to use. Creates an instance of the media store.
- * Require express, body-parser, and node-fetch. Sets global port number to 23750.
+ * Require express and body-parser, and app.js. Sets global port number to 23750. Starts
+ * the server with .listen.
  * @type {MediaStore} instance of the MediaStore file
  */
 const MediaStore = require("./store.js").MediaStore;
 const store = new MediaStore(false);
 const fs = require("fs");
 const bodyParser = require("body-parser");
-let app = require("./app");
+// const {returnServer} = require("./app").returnServer;
+let app = require("./app").returnServer(store);
+app.use(bodyParser.json);
 const port = 23750;
+app.listen(port,async () => {
+    await console.log(`Server app listening on port ${port}`)
+});
 
 /**
  * Check valid takes three parameters: name, type, and desc. These are the individual
@@ -60,7 +66,9 @@ function checkASCII(string) {
 }
 
 /**
- * Load data is the main function loading function of this file.
+ * Load data is the main function loading function of this file. It starts by creating
+ * the server with a call to the app.js function, returnServe. This call also provides
+ * the server with the proper store which has loaded data.
  * It looks at the command line arguments and determines if a file path has been
  * provided. If the file path has not been provided, a console error is printed
  * and the program exits. Otherwise, a fs read file sync call is attempted with
@@ -114,24 +122,13 @@ async function loadData() {
     }
 }
 
-// /**
-//  * Creates an app listening port on the provided server port and prints out
-//  * output to the console.
-//  * @type {http.Server}
-//  */
-// const server = app.listen(port,async () => {
-//     await console.log(`Server app listening on port ${port}`)
-// });
-
-// function returnServer(store) {
-//     app = require("./app");
-//     app.use(bodyParser.json());
-// }
-
-app.returnServer(store);
+/**
+ * This call begins the index class by loading the
+ * data into the file. And calling app.js, the server.
+ */
+loadData();
 
 module.exports = {
     checkValid,
-    checkASCII,
-    loadData,
+    checkASCII
 };

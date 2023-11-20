@@ -1,13 +1,14 @@
 "use strict";
 
-const app = require("./app");
+let server = require("./server");
 const request = require("supertest");
 const bodyParser = require("body-parser");
-const express = require("express");
 const jestConsole = console;
 let {
-    checkASCII, checkValid, loadData, server
-} = require("./index");
+    checkASCII, checkValid
+} = require("./server");
+const {MediaStore} = require("./store");
+const fs = require("fs");
 
 beforeEach(() => {
     global.console = require("console");
@@ -17,7 +18,7 @@ afterEach(() => {
     global.console = jestConsole;
 })
 
-describe("Test function calls in index.js", () => {
+describe("Test function calls in server.js", () => {
     test("Check true ASCII for: 'test'", () => {
        const valid = checkASCII("test");
        expect(valid).toBeTruthy();
@@ -60,9 +61,31 @@ describe("Test function calls in index.js", () => {
 });
 
 describe("GET /media", () => {
+    const store = new MediaStore(false);
+    loadDataForTest("../data/deadmedia.json", store);
+    let app = require("./app").returnServer(store);
+    app.use(bodyParser.json());
+    const port = 3000;
+    app.listen(port,async () => {
+        await console.log(`Server app listening on port ${port}`)
+    });
     it("should return all media in store", async () => {
-        const res = request(app).get("/media");
+        const res = await request(app).get(
+            "/media"
+        );
         expect(res.statusCode).toBe(200);
         console.log(res.body);
-    })
+    });
+
 });
+
+function loadDataForTest(path, store) {
+    let file = fs.readFileSync(path, "utf-8");
+    let info = JSON.parse(file);
+    info.forEach(function (data){
+        let name = data.name;
+        let type = data.type;
+        let desc = data.desc;
+        store.create(name, type, desc);
+    });
+}

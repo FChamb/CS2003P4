@@ -1,11 +1,15 @@
+"use strict";
+
+/**
+ * Global variables for the functions to use. A global access
+ * point for the store which is updated in returnServer.
+ * Require express, body parser, node-fetch and server.js.
+ */
 let store;
 const express = require("express");
 const bodyParser = require("body-parser");
 const fetch = require("node-fetch");
-const app = express();
-const {checkValid} = require("./index");
-app.use(bodyParser.json());
-const port = 23750;
+const server = require("./server");
 
 /**
  * app.get("/media... Is an api request GET, which has two possible outputs.
@@ -13,13 +17,13 @@ const port = 23750;
  * is called with an await async function, getBasicQuery(). Otherwise, the response
  * sent is with an await async function get(). This function just returns all the media.
  */
-app.get("/media", async (req, res) => {
+async function getHandle(req, res) {
     if (req.query.hasOwnProperty("limit") && req.query.hasOwnProperty("offset") || (req.query.hasOwnProperty("name") || req.query.hasOwnProperty("type") || req.query.hasOwnProperty("desc"))) {
         res.send(await getBasicQuery(req, res));
     } else {
         res.send(await get(res, req));
     }
-});
+}
 
 /**
  * Get attempts to grab all the data from the store. This data
@@ -197,8 +201,11 @@ async function getBasicQuery(req, res) {
  * The id of the data grabbed is changed to match the specification: /media/id. Should the id not retrieve
  * anything from the store or any other error, the catch statement sets the response status to the proper code.
  * This data is then sent to the client, it will be null if an error of some type happened.
+ * @param req is the response to be sent
+ * @param res is the client request
+ * @returns {Promise<{next: null, previous: null, count: number, results: *[]}>}
  */
-app.get("/media/:id", async (req, res) => {
+async function getIdHandle(req, res) {
     let id = null;
     let data = null;
     try {
@@ -215,15 +222,18 @@ app.get("/media/:id", async (req, res) => {
         console.error("Error, entry ID: " + id + " not found!");
     }
     res.send(data);
-});
+}
 
 /**
  * app.post("/media/... is an API POST request. In this function, a request is made to add
  * a media to the store. A conditional statement checks to see if the request body contains
  * name and type and desc. If these data types are included in the request, local variables
  * are set. Then a try statement checks
+ * @param req is the response to be sent
+ * @param res is the client request
+ * @returns {Promise<{next: null, previous: null, count: number, results: *[]}>}
  */
-app.post("/media", async (req, res) => {
+async function postHandle(req, res) {
     let output = null;
     const movie = await req.body;
     if (movie.hasOwnProperty("name") && movie.hasOwnProperty("type") && movie.hasOwnProperty("desc")) {
@@ -231,7 +241,7 @@ app.post("/media", async (req, res) => {
         const type = movie["type"];
         const desc = movie["desc"];
         try {
-            let valid = checkValid(name, type, desc);
+            let valid = require("./server").checkValid(name, type, desc);
             if (!valid) {
                 res.status(400);
             } else {
@@ -250,9 +260,21 @@ app.post("/media", async (req, res) => {
         console.error("Error: entry format invalid!");
     }
     res.send(output);
-});
+}
 
-app.put("/media/:id", async (req, res) => {
+/**
+ * app.put("/media/:id... is an API PUT request. In this function, a request is made to update
+ * a media in the store at the provided ID. A conditional statement checks to see if the text
+ * provided in the body of the request contains name type and desc. If not an error is printed
+ * and status code updated. If these values are included, they are parsed into local variables
+ * and a try catch lops attempts to check the validity of the input. Should this pass, the status
+ * code is set and the store updates the media at the provided ID. If the update is successful a json
+ * object is passed to the client to confirm the result.
+ * @param req is the response to be sent
+ * @param res is the client request
+ * @returns {Promise<{next: null, previous: null, count: number, results: *[]}>}
+ */
+async function putHandle(req, res) {
     let id = null;
     let data = null;
     const movie = req.body;
@@ -261,7 +283,7 @@ app.put("/media/:id", async (req, res) => {
         const type = movie["type"];
         const desc = movie["desc"];
         try {
-            let valid = checkValid(name, type, desc);
+            let valid = require("./server").checkValid(name, type, desc);
             if (!valid) {
                 res.status(400);
             } else {
@@ -285,9 +307,19 @@ app.put("/media/:id", async (req, res) => {
         console.error("Error: entry format invalid!");
     }
     res.send(data);
-});
+}
 
-app.delete("/media/:id", async (req, res) => {
+/**
+ * app.delete("/media/:id... is an API DELETE request. In this function, a request is made to
+ * remove a media in the store at the provided ID. A try catch loop grabs the client provided
+ * ID number and attempts to delete the entry from the store. Should this be successful the status
+ * is set to 204 and a message is printed. The proper errors are caught and provided to the client
+ * should an issue arise.
+ * @param req is the response to be sent
+ * @param res is the client request
+ * @returns {Promise<{next: null, previous: null, count: number, results: *[]}>}
+ */
+async function deleteHandle(req, res) {
     let id = null;
     try {
         id = req.params.id;
@@ -303,9 +335,23 @@ app.delete("/media/:id", async (req, res) => {
         console.error("Error, entry ID: " + id + " not found!");
     }
     res.send();
-});
+}
 
-app.post("/transfer", async (req, res) => {
+/**
+ * app.post("/transfer... is an API POST request. In this function, a request is made to
+ * trasnfer a media in the store from the provided source ID to the provided target URL.
+ * The information provided is grabbed from the request body and a conditional statement
+ * checks to see if the body contains a source and target. Should the request contain this
+ * information, local attributes are set and a try catch loops attempts to retrieve the data.
+ * Once the data is grabbed, it is deleted from the store and formatted according to the
+ * specification to be sent. The output is put into JSON format, and a fetch request sends the
+ * data to the target. Should any error arise, the information is printed to the console and
+ * the response status code is updated.
+ * @param req is the response to be sent
+ * @param res is the client request
+ * @returns {Promise<{next: null, previous: null, count: number, results: *[]}>}
+ */
+async function postTransferHandle(req, res) {
     let id = null;
     let print = null;
     let movie = req.body;
@@ -352,18 +398,40 @@ app.post("/transfer", async (req, res) => {
         console.error("Error invalid entry format!")
     }
     res.send(print);
-});
+}
 
-app.listen(port,async () => {
-    await console.log(`Server app listening on port ${port}`)
-});
-
+/**
+ * Return server takes a store variable and creates a new express app. The server
+ * handles are all created with links to the above functions which process the request.
+ * Then this information is packaged up and returned.
+ * @param store1 the provided store to make alterations
+ * @returns {*|Express} server express app for use
+ */
 function returnServer(store1) {
+    const app = express();
+    app.use(bodyParser.json());
     store = store1;
+    app.get("/media", async (req, res) => {
+        await getHandle(req, res);
+    });
+    app.get("/media/:id", async (req, res) => {
+        await getIdHandle(req, res);
+    });
+    app.post("/media", async (req, res) => {
+        await postHandle(req, res);
+    });
+    app.put("/media/:id", async (req, res) => {
+        await putHandle(req, res);
+    });
+    app.delete("/media/:id", async (req, res) => {
+        await deleteHandle(req, res);
+    });
+    app.post("/transfer", async (req, res) => {
+        await postTransferHandle(req, res);
+    });
     return app;
 }
 
 module.exports = {
-    app,
     returnServer
 };

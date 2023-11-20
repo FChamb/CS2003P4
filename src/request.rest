@@ -1,8 +1,3 @@
-POST http://localhost:23750/transfer
-Content-Type: application/json
-
-{"source":"/media/18", "target":"http://localhost:23751/media"}
-
 ###
 GET http://localhost:23750/media?limit=0&offset=0
 ###
@@ -33,7 +28,27 @@ GET http://localhost:23750/media?type=DVD
 GET http://localhost:23750/media?desc=stunning+sci-fi
 ###
 GET http://localhost:23750/media?desc=and&type=dvd
+###
+GET http://localhost:23750/media?type=dvd&limit=2&offset=0
+###
+
+###
+POST http://localhost:23750/media
+Content-Type: application/json
+
+{"name": "The Hobbit", "type": "DVD", "desc": "The original journey of Bilbo."}
+###
+PUT http://localhost:23750/media/20
+Content-Type: application/json
+
+{"name": "The Hobbit", "type": "DVD", "desc": "The original journey of Bilbo and his dwarf friends."}
+###
+DELETE http://localhost:23750/media/20
 
 
 ###
-GET http://localhost:23750/media?type=DVD&limit=2&offset=0
+POST http://localhost:23750/transfer
+Content-Type: application/json
+
+{"source":"/media/18", "target":"http://localhost:23751/media"}
+###
