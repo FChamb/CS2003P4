@@ -1,15 +1,124 @@
 "use strict";
 
 /**
- * Global variables for the functions to use. A global access
- * point for the store which is updated in returnServer.
- * Require express, body parser, node-fetch and server.js.
+ * Global variables for the functions to use. Creates an instance of the media store.
+ * Require express, body-parser, and node-fetch. Sets global port number to 23750.
+ * @type {MediaStore} instance of the MediaStore file
  */
-let store;
+const MediaStore = require("../src/store.js").MediaStore;
+const store = new MediaStore(false);
+const fs = require("fs");
 const express = require("express");
 const bodyParser = require("body-parser");
 const fetch = require("node-fetch");
-const server = require("./server");
+const app = express();
+app.use(bodyParser.json());
+const port = 23750;
+
+
+/**
+ * Check valid takes three parameters: name, type, and desc. These are the individual
+ * attributes of a media and are checked using conditional statements. Two checks per
+ * argument, first to ensure that the length is not greater than it should be, and second
+ * checks the ASCII by calling another function.
+ * @param name of the media
+ * @param type of the media
+ * @param desc of the media
+ * @returns {boolean} true if the media is valid for the store
+ */
+function checkValid(name, type, desc) {
+    if (name.length > 40) {
+        console.error("Error, " + name + " is too long!");
+        return false;
+    } else if (!checkASCII(name)) {
+        console.error("Error, " + name + " does not contain ASCII characters!");
+        return false;
+    } else if (!(type === "TAPE" || type === "CD" || type === "DVD")) {
+        console.error("Error, " + type + " is not valid!");
+        return false;
+    } else if (desc.length > 200) {
+        console.error("Error, " + desc + " is too long!");
+        return false;
+    } else if (!checkASCII(desc)) {
+        console.error("Error, " + desc + " does not contain ASCII characters!");
+        return false;
+    } else {
+        return true;
+    }
+}
+
+/**
+ * Check ASCII takes a string variable and determines if any of the characters
+ * in its content are not ASCII. This is done through a simple conditional statement.
+ * ASCII characters are greater than code type 127, so if the value is less false is returned.
+ * @param string
+ * @returns {boolean}
+ */
+function checkASCII(string) {
+    for (let i = 0; i < string.length; i++) {
+        if (string.charCodeAt(i) > 127) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Load data is the main function loading function of this file. It starts by creating
+ * the server with a call to the app.js function, returnServe. This call also provides
+ * the server with the proper store which has loaded data.
+ * It looks at the command line arguments and determines if a file path has been
+ * provided. If the file path has not been provided, a console error is printed
+ * and the program exits. Otherwise, a fs read file sync call is attempted with
+ * the provided path. The data is attempted to be parsed from json. Should the file
+ * not exist or not contain json, a console error is provided. Lastly,
+ * for every json object in the file, it is checked against valid using
+ * the above methods and if valid it is added to the media store.
+ * @returns {Promise<void>}
+ */
+async function loadData() {
+    let pathToExample = null;
+    // const args = process.argv;
+    // if (args.length === 3) {
+    //     pathToExample = args[2];
+    // } else {
+    //     console.error("Expected \"path/to/directory\" of example data!");
+    //     process.exit(1);
+    // }
+    pathToExample = "../data/deadmedia.json";
+
+    let file = null;
+    let info = null;
+    try {
+        file = fs.readFileSync(pathToExample, "utf-8");
+    } catch (error) {
+        console.error("File: " + pathToExample + " does not exist!");
+        process.exit(1);
+    }
+    try {
+        info = JSON.parse(file);
+    } catch (error) {
+        console.error("File: " + pathToExample + " does not follow valid .json format!");
+        process.exit(1);
+    }
+    if (info != null) {
+        info.forEach(function (data){
+            let name = data.name;
+            let type = data.type;
+            let desc = data.desc;
+            let valid = checkValid(name, type, desc);
+            if (!valid) {
+                process.exit(1);
+            }
+            try {
+                store.create(name, type, desc);
+            } catch (error) {
+                console.error("Error in push data: " + name + ", " + type + ", " + desc + " to store!");
+                process.exit(1);
+            }
+        });
+    }
+}
 
 /**
  * app.get("/media... Is an api request GET, which has two possible outputs.
@@ -17,13 +126,13 @@ const server = require("./server");
  * is called with an await async function, getBasicQuery(). Otherwise, the response
  * sent is with an await async function get(). This function just returns all the media.
  */
-async function getHandle(req, res) {
+app.get("/media", async (req, res) => {
     if (req.query.hasOwnProperty("limit") && req.query.hasOwnProperty("offset") || (req.query.hasOwnProperty("name") || req.query.hasOwnProperty("type") || req.query.hasOwnProperty("desc"))) {
         res.send(await getBasicQuery(req, res));
     } else {
         res.send(await get(res, req));
     }
-}
+});
 
 /**
  * Get attempts to grab all the data from the store. This data
@@ -145,10 +254,6 @@ async function getBasicQuery(req, res) {
     let previous = null;
     if (limit !== null && offset !== null) {
         let length = (await store.retrieveAll()).length;
-        if (offset > length) {
-            res.status(500);
-            return;
-        }
         if (limit + offset > length) {
             res.status(204);
             return;
@@ -205,11 +310,8 @@ async function getBasicQuery(req, res) {
  * The id of the data grabbed is changed to match the specification: /media/id. Should the id not retrieve
  * anything from the store or any other error, the catch statement sets the response status to the proper code.
  * This data is then sent to the client, it will be null if an error of some type happened.
- * @param req is the response to be sent
- * @param res is the client request
- * @returns {Promise<{next: null, previous: null, count: number, results: *[]}>}
  */
-async function getIdHandle(req, res) {
+app.get("/media/:id", async (req, res) => {
     let id = null;
     let data = null;
     try {
@@ -226,18 +328,15 @@ async function getIdHandle(req, res) {
         console.error("Error, entry ID: " + id + " not found!");
     }
     res.send(data);
-}
+});
 
 /**
  * app.post("/media/... is an API POST request. In this function, a request is made to add
  * a media to the store. A conditional statement checks to see if the request body contains
  * name and type and desc. If these data types are included in the request, local variables
  * are set. Then a try statement checks
- * @param req is the response to be sent
- * @param res is the client request
- * @returns {Promise<{next: null, previous: null, count: number, results: *[]}>}
  */
-async function postHandle(req, res) {
+app.post("/media", async (req, res) => {
     let output = null;
     const movie = await req.body;
     if (movie.hasOwnProperty("name") && movie.hasOwnProperty("type") && movie.hasOwnProperty("desc")) {
@@ -245,16 +344,16 @@ async function postHandle(req, res) {
         const type = movie["type"];
         const desc = movie["desc"];
         try {
-            let valid = require("./server").checkValid(name, type, desc);
+            let valid = checkValid(name, type, desc);
             if (!valid) {
                 res.status(400);
             } else {
                 res.status(201);
-                await store.create(name, type, desc);
-                output = JSON.parse(JSON.stringify(await store.retrieve((await store.retrieveAll()).length - 1)));
-                output["id"] = "/media/" + output["id"];
-                console.log("Created new entry: \"" + name + ", " + type + ", " + desc + "\".");
             }
+            await store.create(name, type, desc);
+            output = JSON.parse(JSON.stringify(await store.retrieve((await store.retrieveAll()).length - 1)));
+            output["id"] = "/media/" + output["id"];
+            console.log("Created new entry: \"" + name + ", " + type + ", " + desc + "\".");
         } catch (error) {
             res.status(500);
             console.error("Error in push data: \"" + name + ", " + type + ", " + desc + "\" to store!");
@@ -264,7 +363,7 @@ async function postHandle(req, res) {
         console.error("Error: entry format invalid!");
     }
     res.send(output);
-}
+});
 
 /**
  * app.put("/media/:id... is an API PUT request. In this function, a request is made to update
@@ -278,7 +377,7 @@ async function postHandle(req, res) {
  * @param res is the client request
  * @returns {Promise<{next: null, previous: null, count: number, results: *[]}>}
  */
-async function putHandle(req, res) {
+app.put("/media/:id", async (req, res) => {
     let id = null;
     let data = null;
     const movie = req.body;
@@ -287,17 +386,17 @@ async function putHandle(req, res) {
         const type = movie["type"];
         const desc = movie["desc"];
         try {
-            let valid = require("./server").checkValid(name, type, desc);
+            let valid = checkValid(name, type, desc);
             if (!valid) {
                 res.status(400);
             } else {
                 res.status(200);
-                id = req.params.id;
-                await store.update(id, name, type, desc);
-                data = JSON.parse(JSON.stringify(await store.retrieve((parseInt(id)))));
-                data["id"] = "/media/" + data["id"];
-                console.log("Updated entry: " + id + " to \"" + name + ", " + type + ", " + desc + "\".");
             }
+            id = req.params.id;
+            await store.update(id, name, type, desc);
+            data = JSON.parse(JSON.stringify(await store.retrieve((parseInt(id)))));
+            data["id"] = "/media/" + data["id"];
+            console.log("Updated entry: " + id + " to \"" + name + ", " + type + ", " + desc + "\".");
         } catch (error) {
             if (error === ("Error: cannot find media with ID: " + id)) {
                 res.status(404);
@@ -311,7 +410,7 @@ async function putHandle(req, res) {
         console.error("Error: entry format invalid!");
     }
     res.send(data);
-}
+});
 
 /**
  * app.delete("/media/:id... is an API DELETE request. In this function, a request is made to
@@ -323,7 +422,7 @@ async function putHandle(req, res) {
  * @param res is the client request
  * @returns {Promise<{next: null, previous: null, count: number, results: *[]}>}
  */
-async function deleteHandle(req, res) {
+app.delete("/media/:id", async (req, res) => {
     let id = null;
     try {
         id = req.params.id;
@@ -339,7 +438,7 @@ async function deleteHandle(req, res) {
         console.error("Error, entry ID: " + id + " not found!");
     }
     res.send();
-}
+});
 
 /**
  * app.post("/transfer... is an API POST request. In this function, a request is made to
@@ -355,7 +454,7 @@ async function deleteHandle(req, res) {
  * @param res is the client request
  * @returns {Promise<{next: null, previous: null, count: number, results: *[]}>}
  */
-async function postTransferHandle(req, res) {
+app.post("/transfer", async (req, res) => {
     let id = null;
     let print = null;
     let movie = req.body;
@@ -402,40 +501,20 @@ async function postTransferHandle(req, res) {
         console.error("Error invalid entry format!")
     }
     res.send(print);
-}
+});
+
+app.listen(port, async () => {
+    console.log(`Server app listening on port ${port}`)
+});
 
 /**
- * Return server takes a store variable and creates a new express app. The server
- * handles are all created with links to the above functions which process the request.
- * Then this information is packaged up and returned.
- * @param store1 the provided store to make alterations
- * @returns {*|Express} server express app for use
+ * This call begins the index class by loading the
+ * data into the file. And calling app.js, the server.
  */
-function returnServer(store1) {
-    const app = express();
-    app.use(bodyParser.json());
-    store = store1;
-    app.get("/media", async (req, res) => {
-        await getHandle(req, res);
-    });
-    app.get("/media/:id", async (req, res) => {
-        await getIdHandle(req, res);
-    });
-    app.post("/media", async (req, res) => {
-        await postHandle(req, res);
-    });
-    app.put("/media/:id", async (req, res) => {
-        await putHandle(req, res);
-    });
-    app.delete("/media/:id", async (req, res) => {
-        await deleteHandle(req, res);
-    });
-    app.post("/transfer", async (req, res) => {
-        await postTransferHandle(req, res);
-    });
-    return app;
-}
+loadData().then();
 
 module.exports = {
-    returnServer
+    app,
+    checkASCII,
+    checkValid
 };

@@ -10,10 +10,9 @@ const MediaStore = require("./store.js").MediaStore;
 const store = new MediaStore(false);
 const fs = require("fs");
 const bodyParser = require("body-parser");
-// const {returnServer} = require("./app").returnServer;
 let app = require("./app").returnServer(store);
 app.use(bodyParser.json);
-const port = 23750;
+const port = 23751;
 app.listen(port,async () => {
     await console.log(`Server app listening on port ${port}`)
 });
@@ -80,14 +79,23 @@ function checkASCII(string) {
  */
 async function loadData() {
     let pathToExample = null;
-    // const args = process.argv;
-    // if (args.length === 3) {
-    //     pathToExample = args[2];
-    // } else {
-    //     console.error("Expected \"path/to/directory\" of example data!");
-    //     process.exit(1);
-    // }
-    pathToExample = "../data/deadmedia.json";
+    /**
+     * Below is the code for command line arguments. In order to run the
+     * Jest and SuperTest functionality please comment out this section and
+     * uncomment the line below.
+     */
+    const args = process.argv;
+    if (args.length === 3) {
+        pathToExample = args[2];
+    } else {
+        console.error("Expected \"path/to/directory\" of example data!");
+        process.exit(1);
+    }
+    /**
+     * End of code
+     * Uncomment this line VVVVVVVVVVVVVVVVVVVV
+     */
+    // pathToExample = "../data/deadmedia.json";
 
     let file = null;
     let info = null;

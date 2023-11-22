@@ -4,7 +4,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js ../data/deadmedia.json",
-    "test": "jest"
+    "test": "jest --runInBand --detectOpenHandles --forceExit"
   },
   "author": "Finnegan Chamberlain",
   "license": "ISC",
